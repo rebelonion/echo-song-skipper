@@ -5,7 +5,6 @@ import dev.brahmkshatriya.echo.common.clients.ExtensionClient
 import dev.brahmkshatriya.echo.common.models.Track
 import dev.brahmkshatriya.echo.common.settings.Setting
 import dev.brahmkshatriya.echo.common.settings.SettingCategory
-import dev.brahmkshatriya.echo.common.settings.SettingList
 import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.SettingTextInput
 import dev.brahmkshatriya.echo.common.settings.Settings
@@ -14,8 +13,11 @@ class SongSkipper : ExtensionClient, ControllerClient {
     override suspend fun onExtensionSelected() {} // no-op
 
     private lateinit var setting: Settings
+
     private var cachedArtistRegexes: List<Regex>? = null
     private var lastArtistString: String? = null
+    private var lastSongString: String? = null
+    private var cachedSongRegexes: List<Regex>? = null
 
     private fun getArtistRegexes(artistString: String?): List<Regex>? {
         if (artistString == null) return null
@@ -39,6 +41,30 @@ class SongSkipper : ExtensionClient, ControllerClient {
         cachedArtistRegexes = patterns
         return patterns
     }
+
+    private fun getSongRegexes(songString: String?): List<Regex>? {
+        if (songString == null) return null
+        if (songString == lastSongString && cachedSongRegexes != null) {
+            return cachedSongRegexes
+        }
+
+        val patterns = songString
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { pattern ->
+                if (setting.getBoolean("song_skipper_regex_enabled") == true) {
+                    pattern.toRegex()
+                } else {
+                    ".*${Regex.escape(pattern)}.*".toRegex(RegexOption.IGNORE_CASE)
+                }
+            }
+
+        lastSongString = songString
+        cachedSongRegexes = patterns
+        return patterns
+    }
+
     override val settingItems: List<Setting>
         get() = listOf(
             SettingCategory(
@@ -51,19 +77,17 @@ class SongSkipper : ExtensionClient, ControllerClient {
                         "Enable regex pattern matching for artist names",
                         setting.getBoolean("song_skipper_regex_enabled") == true
                     ),
-                    SettingList(
-                        "When to Skip",
-                        "song_skipper_when_to_skip",
-                        "When to skip the song",
-                        listOf("Remove from playlist", "Skip to next song"),
-                        listOf("Remove", "Skip"),
-                        if (setting.getString("song_skipper_when_to_skip") == "Remove") 0 else 1
-                    ),
                     SettingTextInput(
                         "Skipped Artists",
                         "song_skipper_skipped_artists",
-                        "Artists to skip, comma separated (supports regex)",
+                        "Artists to skip, comma separated",
                         setting.getString("song_skipper_skipped_artists") ?: ""
+                    ),
+                    SettingTextInput(
+                        "Skipped Songs",
+                        "song_skipper_skipped_songs",
+                        "Songs to skip, comma separated",
+                        setting.getString("song_skipper_skipped_songs") ?: ""
                     )
                 )
             )
@@ -89,32 +113,23 @@ class SongSkipper : ExtensionClient, ControllerClient {
         position: Double,
         track: Track
     ) {
-        val whenToSkip = setting.getString("song_skipper_when_to_skip")
-        if (whenToSkip != "Skip") return
-
         val artistString = setting.getString("song_skipper_skipped_artists")
         val artistRegexes = getArtistRegexes(artistString) ?: return
 
         if (artistRegexes.isNotEmpty() && artistRegexes.any { it.matches(track.artists.joinToString()) }) {
             onNextRequest?.invoke()
+            return
+        }
+
+        val songString = setting.getString("song_skipper_skipped_songs")
+        val songRegexes = getSongRegexes(songString) ?: return
+
+        if (songRegexes.isNotEmpty() && songRegexes.any { it.matches(track.title) }) {
+            onNextRequest?.invoke()
         }
     }
 
-    override suspend fun onPlaylistChanged(playlist: List<Track>) {
-        val whenToSkip = setting.getString("song_skipper_when_to_skip")
-        if (whenToSkip != "Remove") return
-
-        val artistString = setting.getString("song_skipper_skipped_artists")
-        val artistRegexes = getArtistRegexes(artistString) ?: return
-
-        if (artistRegexes.isNotEmpty()) {
-            for (track in playlist) {
-                if (artistRegexes.any { it.matches(track.artists.joinToString()) }) {
-                    onRemovePlaylistItemRequest?.invoke(playlist.indexOf(track))
-                }
-            }
-        }
-    }
+    override suspend fun onPlaylistChanged(playlist: List<Track>) {} // no-op
 
     override suspend fun onPlaybackModeChanged(isShuffle: Boolean, repeatState: Int) {} // no-op
 
