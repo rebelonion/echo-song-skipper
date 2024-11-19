@@ -22,6 +22,7 @@
 -keep class dev.brahmkshatriya.echo.extension.SongSkipper {
     *;
 }
+
 -keep class dev.brahmkshatriya.echo.common.** { *; }
 -keep @interface * { *; }
 -keepnames class dev.brahmkshatriya.echo.common.** { *; }
@@ -42,4 +43,7 @@
     <methods>;
 }
 -keepnames class kotlin.coroutines.Continuation { *; }
+
+-keep class kotlin.jvm.functions.Function* { *; }
+
 -dontwarn org.jspecify.annotations.NullMarked
