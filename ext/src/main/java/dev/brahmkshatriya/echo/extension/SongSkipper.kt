@@ -9,7 +9,9 @@ import dev.brahmkshatriya.echo.common.settings.SettingSwitch
 import dev.brahmkshatriya.echo.common.settings.SettingTextInput
 import dev.brahmkshatriya.echo.common.settings.Settings
 
-class SongSkipper : ExtensionClient, ControllerClient {
+class SongSkipper : ExtensionClient, ControllerClient() {
+    override var runsDuringPause: Boolean = false
+
     override suspend fun onExtensionSelected() {} // no-op
 
     private lateinit var setting: Settings
@@ -97,22 +99,12 @@ class SongSkipper : ExtensionClient, ControllerClient {
         setting = settings
     }
 
-    override var onPlayRequest: (suspend () -> Unit)? = null
-    override var onPauseRequest: (suspend () -> Unit)? = null
-    override var onNextRequest: (suspend () -> Unit)? = null
-    override var onPreviousRequest: (suspend () -> Unit)? = null
-    override var onSeekRequest: (suspend (Double) -> Unit)? = null
-    override var onMovePlaylistItemRequest: (suspend (Int, Int) -> Unit)? = null
-    override var onRemovePlaylistItemRequest: (suspend (Int) -> Unit)? = null
-    override var onShuffleModeRequest: (suspend (Boolean) -> Unit)? = null
-    override var onRepeatModeRequest: (suspend (Int) -> Unit)? = null
-    override var onVolumeRequest: (suspend (Double) -> Unit)? = null
-
     override suspend fun onPlaybackStateChanged(
         isPlaying: Boolean,
-        position: Double,
-        track: Track
+        position: Long,
+        track: Track?
     ) {
+        if (track == null) return
         val artistString = setting.getString("song_skipper_skipped_artists")
         val artistRegexes = getArtistRegexes(artistString) ?: return
 
@@ -131,9 +123,9 @@ class SongSkipper : ExtensionClient, ControllerClient {
 
     override suspend fun onPlaylistChanged(playlist: List<Track>) {} // no-op
 
-    override suspend fun onPlaybackModeChanged(isShuffle: Boolean, repeatState: Int) {} // no-op
+    override suspend fun onPlaybackModeChanged(isShuffle: Boolean, repeatMode: RepeatMode) {} // no-op
 
-    override suspend fun onPositionChanged(position: Double) {} // no-op
+    override suspend fun onPositionChanged(position: Long) {} // no-op
 
     override suspend fun onVolumeChanged(volume: Double) {} // no-op
 }
